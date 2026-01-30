@@ -33,7 +33,7 @@ jobs:
     permissions:
       contents: write
     outputs:
-      new_tag: ${{ steps.semver.outputs.new_tag }}
+      new_tag: ${{ steps.semver.outputs.version_tag }}
     steps:
       - uses: actions/checkout@v4
         with:
