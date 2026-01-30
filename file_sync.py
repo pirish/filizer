@@ -9,8 +9,9 @@ import logging
 import shutil
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List, Dict, Any
 from collections import Counter
+from enum import Enum, auto
 
 # Handle TOML compatibility for Python 3.10 vs 3.11+
 if sys.version_info >= (3, 11):
@@ -23,6 +24,12 @@ else:
 
 CONFIG_DIR = Path.home() / ".config" / "filizer"
 CONFIG_FILE = CONFIG_DIR / "cli-conf.toml"
+
+class DuplicateStatus(Enum):
+    NONE = auto()
+    DUPLICATE_CONTENTS = auto()
+    DUPLICATE = auto()
+    PREVIOUSLY_SCANNED = auto()
 
 def setup_logging(level: str, log_file: Optional[str]) -> None:
     """Configures logging with a dynamic level and optional file output."""
@@ -126,14 +133,33 @@ def execute_action(action: str, args: str, current_path: Path, force: bool) -> b
         logging.error(f"Action {action} failed for {current_path.name}: {e}")
         return False
 
-def process_directory(target_dir: str, api_url: str, token: Optional[str], 
+def check_duplicate_status(
+    items: List[Dict[str, Any]], filename: str, current_dir: Path, file_path: Path
+) -> DuplicateStatus:
+    """Determines the duplicate status of a file based on API response."""
+    full_path_str = str(file_path)
+    for item in items:
+        if item.get("full_path") == full_path_str:
+            return DuplicateStatus.PREVIOUSLY_SCANNED
+        if item.get("name") == filename and item.get("parent_dir") == current_dir.name:
+            return DuplicateStatus.DUPLICATE
+    return DuplicateStatus.DUPLICATE_CONTENTS
+
+def process_directory(target_dir: str, api_url: str, token: Optional[str],
                       dry_run: bool, force: bool, excludes: list[str]) -> None:
     """Recursively scans directory, validates with API, and posts data."""
     root_path = Path(target_dir).resolve()
-    stats = Counter(new=0, duplicate=0, path_match=0, failed=0, actions_taken=0)
-    duplicate_parents = set()
+    stats = Counter(
+        new=0,
+        duplicate_contents=0,
+        duplicate=0,
+        previously_scanned=0,
+        failed=0,
+        actions_taken=0,
+    )
+    skipped_dirs = set()
     session = get_retrying_session()
-    
+
     headers = {"Content-Type": "application/json"}
     if token:
         headers["Authorization"] = f"Bearer {token}"
@@ -144,87 +170,116 @@ def process_directory(target_dir: str, api_url: str, token: Optional[str],
 
     logging.info(f"Scanning: {root_path} {'(DRY RUN)' if dry_run else ''}")
 
-    for root, dirs, files in os.walk(root_path):
-        if excludes:
-            dirs[:] = [d for d in dirs if d not in excludes]
+    try:
+        for root, dirs, files in os.walk(root_path, topdown=True):
+            if excludes:
+                dirs[:] = [d for d in dirs if d not in excludes]
 
-        current_dir = Path(root)
-        for filename in files:
-            file_path = current_dir / filename
-            if not file_path.exists(): continue 
-            
-            md5_hash = get_md5(file_path)
-            if not md5_hash:
-                stats['failed'] += 1
+            current_dir = Path(root)
+            if any(skipped_dir == current_dir or skipped_dir in current_dir.parents for skipped_dir in skipped_dirs):
+                dirs[:] = []
+                files[:] = []
                 continue
 
-            is_duplicate = False
-            is_exact_path_match = False
-            remote_action, remote_args = "", ""
-            
-            # 1. Validation (GET)
-            try:
-                params = {"name_eq": filename, "parent_dir_eq": current_dir.name, "md5_eq": md5_hash}
-                res = session.get(api_url, params=params, headers=headers, timeout=10)
-                
-                match (res.status_code, res.json()):
-                    case (200, list(items)) if items:
-                        is_duplicate = True
-                        duplicate_parents.add(current_dir.name)
-                        remote_action = items[0].get("action", "")
-                        remote_args = items[0].get("action_args", "")
-                        
-                        if any(i.get("full_path") == str(file_path) for i in items):
-                            stats['path_match'] += 1
-                            logging.info(f"Path match: {filename}")
-                            is_exact_path_match = True
-                        else:
-                            stats['duplicate'] += 1
-                    case (200, _):
-                        stats['new'] += 1
-                    case (401, _):
-                        logging.error("Authentication failed. Check your token.")
-                        return
-            except requests.exceptions.RequestException as e:
-                logging.error(f"Network error during validation of {filename}: {e}")
-                stats['failed'] += 1
-                continue
+            for filename in files:
+                file_path = current_dir / filename
+                if not file_path.exists():
+                    continue
 
-            # 2. Remote Action Execution
-            if is_duplicate and remote_action:
-                if dry_run:
-                    logging.info(f"[DRY-RUN] Would {remote_action} {filename}")
-                elif execute_action(remote_action, remote_args, file_path, force):
-                    stats['actions_taken'] += 1
+                md5_hash = get_md5(file_path)
+                if not md5_hash:
+                    stats["failed"] += 1
+                    continue
 
-            # 3. Data Submission (POST)
-            if dry_run or not file_path.exists() or is_exact_path_match:
-                continue
+                duplicate_status = DuplicateStatus.NONE
+                remote_action, remote_args = "", ""
 
-            try:
-                payload = {
-                    "name": filename, "size": file_path.stat().st_size,
-                    "kind": file_path.suffix.lower() or "file", "md5": md5_hash,
-                    "parent_dir": current_dir.name, "full_path": str(file_path),
-                    "duplicate": is_duplicate
-                }
-                session.post(api_url, json=payload, headers=headers, timeout=10)
-            except requests.exceptions.RequestException:
-                stats['failed'] += 1
+                # 1. Validation (GET)
+                try:
+                    params = {"md5_eq": md5_hash}
+                    res = session.get(api_url, params=params, headers=headers, timeout=10)
 
-    # --- Summary Report ---
-    summary = [
-        "\n" + "="*40, "SCAN SUMMARY REPORT", "="*40,
-        f"New Files Posted:      {stats['new']}",
-        f"Duplicates Found:      {stats['duplicate']}",
-        f"Exact Path Matches:    {stats['path_match']}",
-        f"Actions Executed:      {stats['actions_taken']}",
-        f"Failed Operations:     {stats['failed']}",
-        "-"*40, "Parent Directories with Duplicates:",
-        *((f" - {p}" for p in sorted(duplicate_parents)) if duplicate_parents else [" - None"]),
-        "="*40
-    ]
-    for line in summary: logging.info(line)
+                    match (res.status_code, res.json()):
+                        case (200, list(items)) if items:
+                            duplicate_status = check_duplicate_status(
+                                items, filename, current_dir, file_path
+                            )
+                            remote_action = items[0].get("action", "")
+                            remote_args = items[0].get("action_args", "")
+
+                            if duplicate_status == DuplicateStatus.PREVIOUSLY_SCANNED:
+                                stats["previously_scanned"] += 1
+                                logging.info(f"Previously scanned: {file_path}")
+                                if not dry_run:
+                                    user_input = input(
+                                        f"MD5 and full path match for {file_path}. "
+                                        "Skip this directory? (y/N): "
+                                    )
+                                    if user_input.lower() == "y":
+                                        skipped_dirs.add(current_dir)
+                                        logging.info(f"Skipping directory: {current_dir}")
+                            elif duplicate_status == DuplicateStatus.DUPLICATE:
+                                stats["duplicate"] += 1
+                                logging.info(f"Duplicate file: {file_path}")
+                            else: # DUPLICATE_CONTENTS
+                                stats["duplicate_contents"] += 1
+                                logging.info(f"Duplicate contents: {file_path}")
+
+                        case (200, _):
+                            stats["new"] += 1
+                        case (401, _):
+                            logging.error("Authentication failed. Check your token.")
+                            return
+                except requests.exceptions.RequestException as e:
+                    logging.error(f"Network error during validation of {filename}: {e}")
+                    stats["failed"] += 1
+                    continue
+
+                # 2. Remote Action Execution
+                if duplicate_status != DuplicateStatus.NONE and remote_action:
+                    if dry_run:
+                        logging.info(f"[DRY-RUN] Would {remote_action} {filename}")
+                    elif execute_action(remote_action, remote_args, file_path, force):
+                        stats["actions_taken"] += 1
+
+                # 3. Data Submission (POST)
+                if (
+                    dry_run
+                    or not file_path.exists()
+                    or duplicate_status == DuplicateStatus.PREVIOUSLY_SCANNED
+                    or duplicate_status == DuplicateStatus.DUPLICATE
+                ):
+                    continue
+
+                try:
+                    payload = {
+                        "name": filename,
+                        "size": file_path.stat().st_size,
+                        "kind": file_path.suffix.lower() or "file",
+                        "md5": md5_hash,
+                        "parent_dir": current_dir.name,
+                        "full_path": str(file_path),
+                        "duplicate_status": duplicate_status.name,
+                    }
+                    session.post(api_url, json=payload, headers=headers, timeout=10)
+                except requests.exceptions.RequestException:
+                    stats["failed"] += 1
+    finally:
+        # --- Summary Report ---
+        summary = [
+            "\n" + "=" * 40,
+            "SCAN SUMMARY REPORT",
+            "=" * 40,
+            f"New Files Posted:           {stats['new']}",
+            f"Duplicate Contents Found:   {stats['duplicate_contents']}",
+            f"Duplicate Files Found:      {stats['duplicate']}",
+            f"Previously Scanned Files:   {stats['previously_scanned']}",
+            f"Actions Executed:           {stats['actions_taken']}",
+            f"Failed Operations:          {stats['failed']}",
+            "=" * 40,
+        ]
+        for line in summary:
+            logging.info(line)
 
 def main():
     config = load_config()
