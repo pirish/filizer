@@ -80,9 +80,7 @@ jobs:
 
       - name: Build Executable
         # We use uv run to execute pyinstaller in a clean, ephemeral environment
-        run: |
-          uv run --with requests --with tomli --with pyinstaller \
-          pyinstaller --onefile --name filizer file_sync.py
+        run: uv run --with requests --with tomli --with pyinstaller pyinstaller --onefile --name filizer file_sync.py
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
