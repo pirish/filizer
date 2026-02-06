@@ -1,10 +1,15 @@
-# Progress Log
-
 ## Completed Criteria
-(None yet)
+- [x] api on /api/v1 - completed in iteration 1
+- [x] reports on /reports - completed in iteration 1
+- [x] / should display basic stats and have a method to search - completed in iteration 1
+- [x] All tests pass - completed in iteration 1
 
 ## Current Status
-Starting fresh iteration.
+Task [Add web interface] completed.
 
 ## Notes
-- Initialized: 2026-02-06 12:15:07
+- Added FastAPI router for /api/v1
+- Added Jinja2 templates for web UI
+- Added /reports endpoint for duplicate detection
+- Added comprehensive tests using mocked DB engine
+- Refactored main.py

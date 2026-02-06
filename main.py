@@ -108,12 +108,35 @@ async def update_file_action(id: str, action_update: ActionUpdate):
     await engine.save(file)
     return file
 
+@api_router.get("/stats")
+async def get_stats():
+    collection = engine._db[FileModel._collection]
+    pipeline = [
+        {
+            "$group": {
+                "_id": None,
+                "total_files": {"$sum": 1},
+                "total_size": {"$sum": "$size"}
+            }
+        }
+    ]
+    cursor = collection.aggregate(pipeline)
+    results = await cursor.to_list(length=1)
+    if not results:
+        return {"total_files": 0, "total_size": 0}
+    return {
+        "total_files": results[0]["total_files"],
+        "total_size": results[0]["total_size"]
+    }
+
 app.include_router(api_router)
 
 @app.get("/reports")
 async def get_reports():
     collection = engine._db[FileModel._collection]
-    pipeline = [
+    
+    # Duplicate Files Pipeline
+    files_pipeline = [
         {"$group": {
             "_id": "$md5",
             "count": {"$sum": 1},
@@ -123,13 +146,44 @@ async def get_reports():
         {"$match": {"count": {"$gt": 1}}}
     ]
     
-    cursor = collection.aggregate(pipeline)
-    results = await cursor.to_list(length=None)
+    # Duplicate Directories Pipeline
+    dirs_pipeline = [
+        {
+            "$group": {
+                "_id": "$parent_dir",
+                "files": {"$push": {"name": "$name", "md5": "$md5"}},
+                "count": {"$sum": 1}
+            }
+        },
+        {
+            "$project": {
+                "parent_dir": "$_id",
+                "files": {
+                    "$sortArray": {"input": "$files", "sortBy": {"name": 1, "md5": 1}}
+                },
+                "file_count": "$count"
+            }
+        },
+        {
+            "$group": {
+                "_id": "$files",
+                "directories": {"$push": "$parent_dir"},
+                "count": {"$sum": 1},
+                "file_count": {"$first": "$file_count"}
+            }
+        },
+        {"$match": {"count": {"$gt": 1}}}
+    ]
     
-    # Process results to be JSON serializable
-    processed_results = []
-    for group in results:
-        # Avoid modifying existing dicts in place if they are used elsewhere (safe here)
+    files_cursor = collection.aggregate(files_pipeline)
+    files_results = await files_cursor.to_list(length=None)
+    
+    dirs_cursor = collection.aggregate(dirs_pipeline)
+    dirs_results = await dirs_cursor.to_list(length=None)
+    
+    # Process files results to be JSON serializable
+    processed_files = []
+    for group in files_results:
         new_group = group.copy()
         new_files = []
         for file in group["files"]:
@@ -138,9 +192,22 @@ async def get_reports():
                 file_dict["_id"] = str(file_dict["_id"])
             new_files.append(file_dict)
         new_group["files"] = new_files
-        processed_results.append(new_group)
+        processed_files.append(new_group)
     
-    return processed_results
+    # Process dirs results
+    processed_dirs = []
+    for group in dirs_results:
+        processed_dirs.append({
+            "files": group["_id"],
+            "directories": group["directories"],
+            "count": group["count"],
+            "file_count": group["file_count"]
+        })
+    
+    return {
+        "duplicate_files": processed_files,
+        "duplicate_directories": processed_dirs
+    }
 
 @app.get("/", response_class=HTMLResponse)
 async def read_root(request: Request):

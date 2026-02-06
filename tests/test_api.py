@@ -84,6 +84,25 @@ def test_crud_file(mock_engine):
     response = client.delete(f"/api/v1/files/{file_id}")
     assert response.status_code == 200
 
+@patch("main.engine")
+def test_stats(mock_engine):
+    mock_collection = MagicMock()
+    mock_engine._db.__getitem__.return_value = mock_collection
+    mock_cursor = AsyncMock()
+    mock_collection.aggregate.return_value = mock_cursor
+    
+    mock_cursor.to_list.return_value = [
+        {
+            "total_files": 10,
+            "total_size": 1000
+        }
+    ]
+    
+    response = client.get("/api/v1/stats")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total_files"] == 10
+    assert data["total_size"] == 1000
 
 @patch("main.engine")
 def test_reports(mock_engine):
@@ -92,10 +111,11 @@ def test_reports(mock_engine):
     # Mock dictionary access for collection
     mock_engine._db.__getitem__.return_value = mock_collection
     
-    mock_cursor = AsyncMock()
-    mock_collection.aggregate.return_value = mock_cursor
+    mock_cursor_files = AsyncMock()
+    mock_cursor_dirs = AsyncMock()
+    mock_collection.aggregate.side_effect = [mock_cursor_files, mock_cursor_dirs]
     
-    mock_cursor.to_list.return_value = [
+    mock_cursor_files.to_list.return_value = [
         {
             "_id": "md5hash",
             "count": 2,
@@ -106,9 +126,22 @@ def test_reports(mock_engine):
             "total_size": 20
         }
     ]
+
+    mock_cursor_dirs.to_list.return_value = [
+        {
+            "_id": [{"name": "f1", "md5": "md5hash"}],
+            "directories": ["dir1", "dir2"],
+            "count": 2,
+            "file_count": 1
+        }
+    ]
     
     response = client.get("/reports")
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 1
-    assert data[0]["_id"] == "md5hash"
+    assert "duplicate_files" in data
+    assert "duplicate_directories" in data
+    assert len(data["duplicate_files"]) == 1
+    assert data["duplicate_files"][0]["_id"] == "md5hash"
+    assert len(data["duplicate_directories"]) == 1
+    assert data["duplicate_directories"][0]["count"] == 2

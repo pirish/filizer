@@ -15,6 +15,7 @@
     <div id="stats">
         <h2>Stats</h2>
         <p>Total Files: <span id="total-files">Loading...</span></p>
+        <p>Total Size: <span id="total-size">Loading...</span> bytes</p>
     </div>
 
     <hr>
@@ -44,8 +45,10 @@
         }
 
         async function updateStats() {
-            const files = await fetchFiles();
-            document.getElementById('total-files').textContent = files.length;
+            const response = await fetch(`${apiBase}/stats`);
+            const stats = await response.json();
+            document.getElementById('total-files').textContent = stats.total_files;
+            document.getElementById('total-size').textContent = stats.total_size;
         }
 
         function handleEnter(event) {
@@ -123,27 +126,47 @@
             const list = document.getElementById('reports-list');
             list.innerHTML = '';
             
-            if (data.length === 0) {
-                list.innerHTML = '<p>No duplicates found.</p>';
-                return;
+            // Render Duplicate Files
+            list.innerHTML += '<h3>Duplicate Files</h3>';
+            if (data.duplicate_files.length === 0) {
+                list.innerHTML += '<p>No duplicate files found.</p>';
+            } else {
+                data.duplicate_files.forEach(group => {
+                    const div = document.createElement('div');
+                    div.className = 'duplicate-group';
+                    div.innerHTML = `<h4>MD5: ${group._id} (Count: ${group.count})</h4>`;
+                    
+                    group.files.forEach(file => {
+                         const id = file.id || file._id;
+                         div.innerHTML += `
+                            <div class="file-item">
+                                <strong>${file.name}</strong> - ${file.full_path}
+                                <button onclick="deleteFile('${id}')">Delete</button>
+                            </div>
+                         `;
+                    });
+                    list.appendChild(div);
+                });
             }
 
-            data.forEach(group => {
-                const div = document.createElement('div');
-                div.className = 'duplicate-group';
-                div.innerHTML = `<h3>MD5: ${group._id} (Count: ${group.count})</h3>`;
-                
-                group.files.forEach(file => {
-                     const id = file.id || file._id;
-                     div.innerHTML += `
-                        <div class="file-item">
-                            <strong>${file.name}</strong> - ${file.full_path}
-                            <button onclick="deleteFile('${id}')">Delete</button>
-                        </div>
-                     `;
+            // Render Duplicate Directories
+            list.innerHTML += '<h3>Duplicate Directories</h3>';
+            if (data.duplicate_directories.length === 0) {
+                list.innerHTML += '<p>No duplicate directories found.</p>';
+            } else {
+                data.duplicate_directories.forEach(group => {
+                    const div = document.createElement('div');
+                    div.className = 'duplicate-group';
+                    div.innerHTML = `<h4>Directories: ${group.directories.join(', ')}</h4>`;
+                    div.innerHTML += `<p>File Count: ${group.file_count}</p>`;
+                    div.innerHTML += '<ul>';
+                    group.files.forEach(file => {
+                        div.innerHTML += `<li>${file.name} (MD5: ${file.md5})</li>`;
+                    });
+                    div.innerHTML += '</ul>';
+                    list.appendChild(div);
                 });
-                list.appendChild(div);
-            });
+            }
         }
 
         // Initial load
