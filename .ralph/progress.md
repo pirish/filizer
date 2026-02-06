@@ -3,13 +3,14 @@
 - [x] reports on /reports - completed in iteration 1
 - [x] / should display basic stats and have a method to search - completed in iteration 1
 - [x] All tests pass - completed in iteration 1
+- [x] Duplicate directory reports - completed in iteration 2
+- [x] Enhanced stats (total size) - completed in iteration 2
 
 ## Current Status
-Task [Add web interface] completed.
+Task [Add web interface] completed and enhanced.
 
 ## Notes
-- Added FastAPI router for /api/v1
-- Added Jinja2 templates for web UI
-- Added /reports endpoint for duplicate detection
-- Added comprehensive tests using mocked DB engine
-- Refactored main.py
+- Added duplicate directory detection based on file content and names.
+- Added /api/v1/stats for efficient stats retrieval.
+- Updated Web UI to show both file and directory duplicate reports.
+- Added tests for new functionality.
