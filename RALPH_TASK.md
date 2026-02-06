@@ -9,10 +9,10 @@ test_command: [Command to run tests, e.g., npm test]
 
 ## Success Criteria
 
-1. [ ] api on /api/v1
-2. [ ] reports on /reports
-3. [ ] / should display basic stats and have a method to search
-4. [ ] All tests pass
+1. [x] api on /api/v1
+2. [x] reports on /reports
+3. [x] / should display basic stats and have a method to search
+4. [x] All tests pass
 
 ## Context
 
