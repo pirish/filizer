@@ -5,12 +5,11 @@
 - [x] All tests pass - completed in iteration 1
 - [x] Duplicate directory reports - completed in iteration 2
 - [x] Enhanced stats (total size) - completed in iteration 2
+- [x] Update readme with instructions on how to run application and different features - completed in iteration 3
 
 ## Current Status
-Task [Add web interface] completed and enhanced.
+All criteria completed. Project is ready.
 
 ## Notes
-- Added duplicate directory detection based on file content and names.
-- Added /api/v1/stats for efficient stats retrieval.
-- Updated Web UI to show both file and directory duplicate reports.
-- Added tests for new functionality.
+- README.md updated with comprehensive instructions.
+- All tests passing.
