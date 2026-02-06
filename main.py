@@ -1,0 +1,147 @@
+import secrets
+from fastapi import FastAPI, HTTPException, Body, Request, Depends, status, APIRouter
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from config import settings
+from pymongo import AsyncMongoClient
+from pyodmongo import AsyncDbEngine, DbModel
+from pyodmongo.queries import mount_query_filter
+from bson import ObjectId
+from pydantic import BaseModel, Field
+from typing import Optional, List, ClassVar
+
+# export MONGODB_URL="mongodb+srv://localhost:27017/?retryWrites=true&w=majority"
+
+security = HTTPBasic(auto_error=False)
+
+def get_current_username(credentials: HTTPBasicCredentials = Depends(security)):
+    if not settings.auth.enabled:
+        return "anonymous"
+
+    if not credentials:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+
+    correct_username = settings.auth.username
+    correct_password = settings.auth.password
+
+    # Use secrets.compare_digest for secure comparison
+    is_correct_username = secrets.compare_digest(credentials.username, correct_username)
+    is_correct_password = secrets.compare_digest(credentials.password, correct_password)
+
+    if not (is_correct_username and is_correct_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+    return credentials.username
+
+app = FastAPI(dependencies=[Depends(get_current_username)])
+templates = Jinja2Templates(directory="templates")
+api_router = APIRouter(prefix="/api/v1")
+
+engine = AsyncDbEngine(mongo_uri='mongodb://localhost:27017', db_name='files_db')
+
+class FileModel(DbModel):
+    #id: Optional[str] = Field(alias="_id", default=None)
+    name: str
+    size: int
+    kind: str
+    md5: str
+    parent_dir: str
+    full_path: str
+    action: Optional[str] = None
+    action_args: Optional[str] = None
+    duplicate: bool
+    _collection: ClassVar[str] = "files"
+
+class ActionUpdate(BaseModel):
+    action: str
+    action_args: Optional[str] = None
+
+@api_router.post("/files/", response_model=FileModel)
+async def create_file(request: Request):
+    #  data = file.dict(by_alias=True, exclude=["id"])
+    data = await request.json()
+    file_model = FileModel(**data)
+    result = await engine.save(file_model)
+    #data["_id"] = str(result.upserted_ids)
+    return file_model
+
+@api_router.get("/files/", response_model=List[FileModel])
+async def get_files(request: Request):
+    query, sort = mount_query_filter(
+        Model=FileModel,
+        items=request.query_params._dict,
+        initial_comparison_operators=[],
+    )
+    return await engine.find_many(Model=FileModel, query=query, sort=sort)
+
+@api_router.get("/files/{id}", response_model=FileModel)
+async def get_file(id: str):
+    file = await engine.find_one(Model=FileModel, query={"_id": ObjectId(id)})
+    if not file:
+        raise HTTPException(status_code=404, detail="File not found")
+    return file
+
+@api_router.delete("/files/{id}")
+async def delete_file(id: str):
+    # pyodmongo delete expects query
+    response = await engine.delete(Model=FileModel, query={"_id": ObjectId(id)})
+    if response.deleted_count == 0:
+         raise HTTPException(status_code=404, detail="File not found")
+    return {"status": "deleted", "count": response.deleted_count}
+
+@api_router.put("/files/{id}/action", response_model=FileModel)
+async def update_file_action(id: str, action_update: ActionUpdate):
+    file = await engine.find_one(Model=FileModel, query={"_id": ObjectId(id)})
+    if not file:
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    file.action = action_update.action
+    file.action_args = action_update.action_args
+    await engine.save(file)
+    return file
+
+app.include_router(api_router)
+
+@app.get("/reports")
+async def get_reports():
+    collection = engine._db[FileModel._collection]
+    pipeline = [
+        {"$group": {
+            "_id": "$md5",
+            "count": {"$sum": 1},
+            "files": {"$push": "$$ROOT"},
+            "total_size": {"$sum": "$size"}
+        }},
+        {"$match": {"count": {"$gt": 1}}}
+    ]
+    
+    cursor = collection.aggregate(pipeline)
+    results = await cursor.to_list(length=None)
+    
+    # Process results to be JSON serializable
+    processed_results = []
+    for group in results:
+        # Avoid modifying existing dicts in place if they are used elsewhere (safe here)
+        new_group = group.copy()
+        new_files = []
+        for file in group["files"]:
+            file_dict = dict(file)
+            if "_id" in file_dict:
+                file_dict["_id"] = str(file_dict["_id"])
+            new_files.append(file_dict)
+        new_group["files"] = new_files
+        processed_results.append(new_group)
+    
+    return processed_results
+
+@app.get("/", response_class=HTMLResponse)
+async def read_root(request: Request):
+    return templates.TemplateResponse(request=request, name="index.html")

@@ -1,0 +1,11 @@
+{
+    "name": "test2.txt",
+    "size": 123,
+    "kind": "file",
+    "md5": "123",
+    "parent_dir": "test_dir2",
+    "full_path": "test_dir2/test2.txt",
+    "action": "",
+    "action_args": "",
+    "duplicate": false
+}
