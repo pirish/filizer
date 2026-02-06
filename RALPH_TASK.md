@@ -13,6 +13,7 @@ test_command: [Command to run tests, e.g., npm test]
 2. [x] reports on /reports
 3. [x] / should display basic stats and have a method to search
 4. [x] All tests pass
+5. [ ] Update readme with instructions on how to run application and different features
 
 ## Context
 
