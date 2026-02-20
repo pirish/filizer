@@ -25,7 +25,7 @@ else:
 CONFIG_DIR = Path.home() / ".config" / "filizer"
 CONFIG_FILE = CONFIG_DIR / "cli-conf.toml"
 
-from common.models import DuplicateStatus
+from common.models import DuplicateStatus, FileModel
 
 def setup_logging(level: str, log_file: Optional[str]) -> None:
     """Configures logging with a dynamic level and optional file output."""
@@ -248,16 +248,16 @@ def process_directory(target_dir: str, api_url: str, token: Optional[str],
                     continue
 
                 try:
-                    payload = {
-                        "name": filename,
-                        "size": file_path.stat().st_size,
-                        "kind": file_path.suffix.lower() or "file",
-                        "md5": md5_hash,
-                        "parent_dir": current_dir.name,
-                        "full_path": str(file_path),
-                        "duplicate_status": duplicate_status.name,
-                    }
-                    session.post(api_url, json=payload, headers=headers, timeout=10)
+                    file_model = FileModel(
+                        name=filename,
+                        size=file_path.stat().st_size,
+                        kind=file_path.suffix.lower() or "file",
+                        md5=md5_hash,
+                        parent_dir=current_dir.name,
+                        full_path=str(file_path),
+                        duplicate_status=duplicate_status,
+                    )
+                    session.post(api_url, json=file_model.model_dump(mode='json'), headers=headers, timeout=10)
                 except requests.exceptions.RequestException:
                     stats["failed"] += 1
     finally:

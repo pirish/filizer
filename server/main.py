@@ -10,7 +10,7 @@ from pyodmongo.queries import mount_query_filter
 from bson import ObjectId
 from pydantic import BaseModel, Field
 from typing import Optional, List, ClassVar
-from common.models import DuplicateStatus
+from common.models import DuplicateStatus, FileModel, ActionUpdate
 
 # export MONGODB_URL="mongodb+srv://localhost:27017/?retryWrites=true&w=majority"
 
@@ -47,23 +47,6 @@ templates = Jinja2Templates(directory="server/templates")
 api_router = APIRouter(prefix="/api/v1")
 
 engine = AsyncDbEngine(mongo_uri='mongodb://localhost:27017', db_name='files_db')
-
-class FileModel(DbModel):
-    #id: Optional[str] = Field(alias="_id", default=None)
-    name: str
-    size: int
-    kind: str
-    md5: str
-    parent_dir: str
-    full_path: str
-    action: Optional[str] = None
-    action_args: Optional[str] = None
-    duplicate_status: DuplicateStatus
-    _collection: ClassVar[str] = "files"
-
-class ActionUpdate(BaseModel):
-    action: str
-    action_args: Optional[str] = None
 
 @api_router.post("/files/", response_model=FileModel)
 async def create_file(request: Request):
