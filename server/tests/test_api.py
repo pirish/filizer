@@ -12,6 +12,7 @@ def override_auth():
 app.dependency_overrides[get_current_username] = override_auth
 
 client = TestClient(app)
+client.headers = {"X-Client-Version": "1.0.0"}
 
 def test_read_main():
     response = client.get("/")
