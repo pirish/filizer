@@ -181,3 +181,43 @@ token = "test-token"
         assert config["url"] == "https://example.com/api"
         assert config["token"] == "test-token"
 
+@patch('builtins.input', return_value='y')
+def test_marked_for_deletion_logic(mock_input, tmp_path, caplog):
+    """Test MARKED_FOR_DELETION action creates marker, and subsequent scan prompts for removal."""
+    caplog.set_level(logging.INFO)
+    
+    test_dir = tmp_path / "test_dir"
+    test_dir.mkdir()
+    file_path = test_dir / "file.txt"
+    file_path.write_text("content")
+    md5 = get_md5(file_path)
+
+    api_url = "https://api.example.com/files"
+    
+    # 1. First scan: server returns MARKED_FOR_DELETION action
+    with requests_mock.Mocker() as m:
+        m.get(api_url, json=[{
+            "name": "file.txt",
+            "parent_dir": "test_dir",
+            "full_path": str(file_path),
+            "md5": md5,
+            "action": "marked_for_deletion"
+        }])
+        
+        process_directory(str(test_dir), api_url, token="test-token", dry_run=False, force=False, excludes=[])
+
+    assert "ACTION: Created marker file" in caplog.text
+    marker_file = test_dir / "MARKED_FOR_DELETION"
+    assert marker_file.exists()
+
+    # 2. Second scan: marker file exists, should prompt for removal
+    caplog.clear()
+    with requests_mock.Mocker() as m:
+        # Mock GET to return something so it continues
+        m.get(api_url, json=[]) 
+        m.post(api_url, status_code=201)
+        
+        process_directory(str(test_dir), api_url, token="test-token", dry_run=False, force=False, excludes=[])
+
+    assert f"Removed marker file: {marker_file}" in caplog.text
+    assert not marker_file.exists()

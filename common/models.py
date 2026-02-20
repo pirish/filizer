@@ -8,6 +8,7 @@ class DuplicateStatus(str, Enum):
     DUPLICATE_CONTENTS = "DUPLICATE_CONTENTS"
     DUPLICATE = "DUPLICATE"
     PREVIOUSLY_SCANNED = "PREVIOUSLY_SCANNED"
+    MARKED_FOR_DELETION = "MARKED_FOR_DELETION"
 
 class ActionUpdate(BaseModel):
     action: str

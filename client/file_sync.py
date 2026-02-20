@@ -124,6 +124,11 @@ def execute_action(action: str, args: str, current_path: Path, force: bool) -> b
                 current_path.unlink()
                 logging.info(f"ACTION: Removed {current_path.name}")
                 return True
+            case "marked_for_deletion":
+                marker_file = current_path.parent / "MARKED_FOR_DELETION"
+                marker_file.touch(exist_ok=True)
+                logging.info(f"ACTION: Created marker file {marker_file}")
+                return True
         return False
     except Exception as e:
         logging.error(f"Action {action} failed for {current_path.name}: {e}")
@@ -172,6 +177,18 @@ def process_directory(target_dir: str, api_url: str, token: Optional[str],
                 dirs[:] = [d for d in dirs if d not in excludes]
 
             current_dir = Path(root)
+            
+            # Check for MARKED_FOR_DELETION file in current directory
+            marker_file = current_dir / "MARKED_FOR_DELETION"
+            if marker_file.exists():
+                if dry_run:
+                    logging.info(f"[DRY-RUN] Would remove marker file and potentially directory: {current_dir}")
+                else:
+                    confirm = input(f"CONFIRM: Directory {current_dir} is MARKED_FOR_DELETION. Delete marker? (y/N): ")
+                    if confirm.lower() == 'y':
+                        marker_file.unlink()
+                        logging.info(f"Removed marker file: {marker_file}")
+
             if any(skipped_dir == current_dir or skipped_dir in current_dir.parents for skipped_dir in skipped_dirs):
                 dirs[:] = []
                 files[:] = []
