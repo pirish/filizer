@@ -10,11 +10,33 @@ from pyodmongo.queries import mount_query_filter
 from bson import ObjectId
 from pydantic import BaseModel, Field
 from typing import Optional, List, ClassVar
-from common.models import DuplicateStatus, FileModel, ActionUpdate
+from common.models import DuplicateStatus, FileModel, ActionUpdate, VERSION, MIN_CLIENT_VERSION
+import semver
 
 # export MONGODB_URL="mongodb+srv://localhost:27017/?retryWrites=true&w=majority"
 
 security = HTTPBasic(auto_error=False)
+
+def verify_version(request: Request):
+    client_version = request.headers.get("X-Client-Version")
+    if not client_version:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Missing X-Client-Version header",
+        )
+    
+    try:
+        if semver.compare(client_version, MIN_CLIENT_VERSION) < 0:
+            raise HTTPException(
+                status_code=status.HTTP_426_UPGRADE_REQUIRED,
+                detail=f"Client version {client_version} is too old. Minimum required version is {MIN_CLIENT_VERSION}",
+            )
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid X-Client-Version format: {client_version}",
+        )
+    return client_version
 
 def get_current_username(credentials: HTTPBasicCredentials = Depends(security)):
     if not settings.auth.enabled:
@@ -44,7 +66,11 @@ def get_current_username(credentials: HTTPBasicCredentials = Depends(security)):
 
 app = FastAPI(dependencies=[Depends(get_current_username)])
 templates = Jinja2Templates(directory="server/templates")
-api_router = APIRouter(prefix="/api/v1")
+api_router = APIRouter(prefix="/api/v1", dependencies=[Depends(verify_version)])
+
+@app.get("/version")
+async def get_version():
+    return {"version": VERSION, "min_client_version": MIN_CLIENT_VERSION}
 
 engine = AsyncDbEngine(mongo_uri='mongodb://localhost:27017', db_name='files_db')
 

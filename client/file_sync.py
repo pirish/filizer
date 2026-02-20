@@ -25,7 +25,8 @@ else:
 CONFIG_DIR = Path.home() / ".config" / "filizer"
 CONFIG_FILE = CONFIG_DIR / "cli-conf.toml"
 
-from common.models import DuplicateStatus, FileModel
+from common.models import DuplicateStatus, FileModel, VERSION, MIN_SERVER_VERSION
+import semver
 
 def setup_logging(level: str, log_file: Optional[str]) -> None:
     """Configures logging with a dynamic level and optional file output."""
@@ -89,6 +90,7 @@ def get_md5(file_path: Path) -> Optional[str]:
 def get_retrying_session() -> requests.Session:
     """Creates a session with exponential backoff retries for 5xx errors."""
     session = requests.Session()
+    session.headers.update({"X-Client-Version": VERSION})
     retries = Retry(
         total=3,
         backoff_factor=1,
@@ -146,6 +148,36 @@ def check_duplicate_status(
             return DuplicateStatus.DUPLICATE
     return DuplicateStatus.DUPLICATE_CONTENTS
 
+def check_server_compatibility(session: requests.Session, base_url: str) -> bool:
+    """Checks if the server version is compatible with the client."""
+    # Assume base_url is something like http://api.example.com/api/v1/files
+    # Version endpoint is at http://api.example.com/version
+    from urllib.parse import urlparse, urlunparse
+    parsed_url = urlparse(base_url)
+    version_url = urlunparse((parsed_url.scheme, parsed_url.netloc, "/version", "", "", ""))
+    
+    try:
+        response = session.get(version_url, timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            server_version = data.get("version")
+            if not server_version:
+                logging.warning("Server did not provide a version. Proceeding anyway.")
+                return True
+            
+            if semver.compare(server_version, MIN_SERVER_VERSION) < 0:
+                logging.error(f"Server version {server_version} is too old. Minimum required is {MIN_SERVER_VERSION}")
+                return False
+            
+            logging.info(f"Connected to server version {server_version} (Client v{VERSION})")
+            return True
+        else:
+            logging.warning(f"Could not check server version compatibility (HTTP {response.status_code})")
+            return True
+    except Exception as e:
+        logging.warning(f"Error checking server version: {e}")
+        return True
+
 def process_directory(target_dir: str, api_url: str, token: Optional[str],
                       dry_run: bool, force: bool, excludes: list[str]) -> None:
     """Recursively scans directory, validates with API, and posts data."""
@@ -170,6 +202,10 @@ def process_directory(target_dir: str, api_url: str, token: Optional[str],
         return
 
     logging.info(f"Scanning: {root_path} {'(DRY RUN)' if dry_run else ''}")
+
+    if not check_server_compatibility(session, api_url):
+        logging.error("Incompatible server version. Aborting scan.")
+        return
 
     try:
         for root, dirs, files in os.walk(root_path, topdown=True):

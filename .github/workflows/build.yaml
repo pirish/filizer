@@ -20,39 +20,43 @@ jobs:
           enable-cache: true
 
       - name: Set up Python
-        run: uv python install 3.11
+        run: uv python install 3.13
 
       - name: Run tests
-        run: uv run --with requests --with tomli --with pytest pytest test_file_sync.py
+        run: uv run pytest
 
-  tag:
-    name: Generate Tag
+  release:
+    name: Semantic Release
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
     needs: test
+    if: github.ref == 'refs/heads/main'
     permissions:
       contents: write
+      issues: write
+      pull-requests: write
     outputs:
-      new_tag: ${{ steps.semver.outputs.version_tag }}
+      new_release_published: ${{ steps.semantic.outputs.new_release_published }}
+      new_release_version: ${{ steps.semantic.outputs.new_release_version }}
+      new_release_git_tag: ${{ steps.semantic.outputs.new_release_git_tag }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Bump version and push tag
-        id: semver
-        uses: paulhatch/semantic-version@v5.4.0
+      - name: Semantic Release
+        id: semantic
+        uses: cycjimmy/semantic-release-action@v4
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          branch: main
-          tag_prerelease: false
-          bump_each_commit: true
-
+          extra_plugins: |
+            @semantic-release/changelog
+            @semantic-release/exec
+            @semantic-release/git
 
   build:
     name: Build for ${{ matrix.os }}
-    needs: [test, tag]
-    if: startsWith(github.ref, 'refs/tags/') || needs.tag.outputs.new_tag != ''
+    needs: [test, release]
+    if: needs.release.outputs.new_release_published == 'true' || startsWith(github.ref, 'refs/tags/')
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -76,11 +80,11 @@ jobs:
           enable-cache: true
 
       - name: Set up Python
-        run: uv python install 3.11
+        run: uv python install 3.13
 
       - name: Build Executable
         # We use uv run to execute pyinstaller in a clean, ephemeral environment
-        run: uv run --with requests --with tomli --with pyinstaller pyinstaller --onefile --name filizer file_sync.py
+        run: uv run --with pyinstaller pyinstaller --onefile --name filizer client/file_sync.py
 
       - name: Rename Artifact
         shell: bash
@@ -92,22 +96,21 @@ jobs:
           name: ${{ matrix.asset_name }}
           path: dist/${{ matrix.asset_name }}
 
-  release:
-    name: Create GitHub Release
-    needs: [build, tag]
+  publish:
+    name: Publish Assets to Release
+    needs: [build, release]
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/') || needs.tag.outputs.new_tag != ''
+    if: needs.release.outputs.new_release_published == 'true' || startsWith(github.ref, 'refs/tags/')
     permissions:
       contents: write
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         
-      - name: Create Release
+      - name: Upload to Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ needs.tag.outputs.new_tag || github.ref_name }}
-          generate_release_notes: true
+          tag_name: ${{ needs.release.outputs.new_release_git_tag || github.ref_name }}
           files: |
             filizer-linux/filizer-linux
             filizer-windows.exe/filizer-windows.exe

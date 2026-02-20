@@ -1,0 +1,24 @@
+{
+  "branches": ["main"],
+  "plugins": [
+    "@semantic-release/commit-analyzer",
+    "@semantic-release/release-notes-generator",
+    "@semantic-release/changelog",
+    [
+      "@semantic-release/exec",
+      {
+        "prepareCmd": "sed -i 's/version = ".*"/version = "${nextRelease.version}"/' pyproject.toml && sed -i 's/VERSION = ".*"/VERSION = "${nextRelease.version}"/' common/models.py"
+      }
+    ],
+    [
+      "@semantic-release/git",
+      {
+        "assets": ["pyproject.toml", "common/models.py", "CHANGELOG.md"],
+        "message": "chore(release): ${nextRelease.version} [skip ci]
+
+${nextRelease.notes}"
+      }
+    ],
+    "@semantic-release/github"
+  ]
+}

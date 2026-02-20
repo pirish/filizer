@@ -2,6 +2,14 @@ from enum import Enum
 from pydantic import BaseModel, Field
 from typing import Optional, List, ClassVar
 from pyodmongo import DbModel
+import semver
+
+# Current Project Version
+VERSION = "1.0.0"
+# Minimum Client version the server supports
+MIN_CLIENT_VERSION = "1.0.0"
+# Minimum Server version the client supports
+MIN_SERVER_VERSION = "1.0.0"
 
 class DuplicateStatus(str, Enum):
     NONE = "NONE"
