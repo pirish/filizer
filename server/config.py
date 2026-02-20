@@ -10,6 +10,8 @@ class AuthConfig(BaseModel):
 
 class Settings(BaseModel):
     auth: AuthConfig = AuthConfig()
+    mongodb_url: str = "mongodb://localhost:27017"
+    db_name: str = "files_db"
 
 def load_settings() -> Settings:
     # 1. Defaults
@@ -24,6 +26,9 @@ def load_settings() -> Settings:
                 # Deep merge logic for simple structure
                 if "auth" in toml_data:
                     config_data["auth"] = toml_data["auth"]
+                if "mongodb" in toml_data:
+                    config_data["mongodb_url"] = toml_data["mongodb"].get("url")
+                    config_data["db_name"] = toml_data["mongodb"].get("db_name")
         except Exception as e:
             print(f"Warning: Failed to parse config file at {config_path}: {e}")
 
@@ -42,6 +47,11 @@ def load_settings() -> Settings:
         if "auth" not in config_data:
             config_data["auth"] = {}
         config_data["auth"].update(auth_env)
+
+    if os.getenv("MONGODB_URL") is not None:
+        config_data["mongodb_url"] = os.getenv("MONGODB_URL")
+    if os.getenv("MONGODB_DB_NAME") is not None:
+        config_data["db_name"] = os.getenv("MONGODB_DB_NAME")
 
     return Settings(**config_data)
 

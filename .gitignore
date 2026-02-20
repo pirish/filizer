@@ -12,4 +12,4 @@ wheels/
 # Application specific
 filizer.log
 .pytest_cache/
-.ralph/
+**/.ralph/

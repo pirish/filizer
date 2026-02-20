@@ -72,7 +72,7 @@ api_router = APIRouter(prefix="/api/v1", dependencies=[Depends(verify_version)])
 async def get_version():
     return {"version": VERSION, "min_client_version": MIN_CLIENT_VERSION}
 
-engine = AsyncDbEngine(mongo_uri='mongodb://localhost:27017', db_name='files_db')
+engine = AsyncDbEngine(mongo_uri=settings.mongodb_url, db_name=settings.db_name)
 
 @api_router.post("/files/", response_model=FileModel)
 async def create_file(request: Request):

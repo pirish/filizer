@@ -43,6 +43,8 @@ Filizer can be configured using environment variables or a TOML file located at 
 - `API_AUTH_ENABLED`: Set to `true` to enable Basic Authentication (default: `false`).
 - `API_USERNAME`: The username for Basic Auth (default: `admin`).
 - `API_PASSWORD`: The password for Basic Auth (default: `secret`).
+- `MONGODB_URL`: The MongoDB connection string (default: `mongodb://localhost:27017`).
+- `MONGODB_DB_NAME`: The MongoDB database name (default: `files_db`).
 
 ### TOML Configuration
 
@@ -53,6 +55,10 @@ Example `~/.config/filizer/server-conf.toml`:
 enabled = true
 username = "myuser"
 password = "mypassword"
+
+[mongodb]
+url = "mongodb://localhost:27017"
+db_name = "files_db"
 ```
 
 ## Running the Application
@@ -60,10 +66,22 @@ password = "mypassword"
 To start the Filizer server:
 
 ```bash
-uv run uvicorn main:app --reload
+uv run uvicorn server.main:app --host 0.0.0.0 --port 8000
 ```
 
 The web dashboard will be available at `http://localhost:8000`.
+
+## Deployment
+
+### Helm
+
+The server application can be deployed using Helm:
+
+```bash
+helm install filizer-server ./charts/filizer-server
+```
+
+See the [Helm chart directory](../charts/filizer-server) for more configuration options.
 
 ## API Documentation
 

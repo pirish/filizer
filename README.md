@@ -27,6 +27,18 @@ Individual application READMEs can be found in their respective directories:
 - [Client README](client/README.md)
 - [Server README](server/README.md)
 
+## Deployment
+
+### Helm
+
+The server application can be deployed using Helm:
+
+```bash
+helm install filizer-server ./charts/filizer-server
+```
+
+See the [Helm chart directory](./charts/filizer-server) for more configuration options.
+
 ## Versioning Policy
 
 Filizer follows Semantic Versioning (SemVer) for both the client and server.

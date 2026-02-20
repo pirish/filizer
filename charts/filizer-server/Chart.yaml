@@ -1,0 +1,12 @@
+apiVersion: v2
+name: filizer-server
+description: A Helm chart for Filizer Server
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+
+dependencies:
+  - name: mongodb
+    version: 16.4.2
+    repository: https://charts.bitnami.com/bitnami
+    condition: mongodb.enabled
