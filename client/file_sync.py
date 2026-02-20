@@ -12,7 +12,6 @@ import sys
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 from collections import Counter
-from enum import Enum, auto
 
 # Handle TOML compatibility for Python 3.10 vs 3.11+
 if sys.version_info >= (3, 11):
@@ -26,11 +25,7 @@ else:
 CONFIG_DIR = Path.home() / ".config" / "filizer"
 CONFIG_FILE = CONFIG_DIR / "cli-conf.toml"
 
-class DuplicateStatus(Enum):
-    NONE = auto()
-    DUPLICATE_CONTENTS = auto()
-    DUPLICATE = auto()
-    PREVIOUSLY_SCANNED = auto()
+from common.models import DuplicateStatus
 
 def setup_logging(level: str, log_file: Optional[str]) -> None:
     """Configures logging with a dynamic level and optional file output."""

@@ -10,6 +10,7 @@ from pyodmongo.queries import mount_query_filter
 from bson import ObjectId
 from pydantic import BaseModel, Field
 from typing import Optional, List, ClassVar
+from common.models import DuplicateStatus
 
 # export MONGODB_URL="mongodb+srv://localhost:27017/?retryWrites=true&w=majority"
 
@@ -42,7 +43,7 @@ def get_current_username(credentials: HTTPBasicCredentials = Depends(security)):
     return credentials.username
 
 app = FastAPI(dependencies=[Depends(get_current_username)])
-templates = Jinja2Templates(directory="templates")
+templates = Jinja2Templates(directory="server/templates")
 api_router = APIRouter(prefix="/api/v1")
 
 engine = AsyncDbEngine(mongo_uri='mongodb://localhost:27017', db_name='files_db')
@@ -57,7 +58,7 @@ class FileModel(DbModel):
     full_path: str
     action: Optional[str] = None
     action_args: Optional[str] = None
-    duplicate_status: str
+    duplicate_status: DuplicateStatus
     _collection: ClassVar[str] = "files"
 
 class ActionUpdate(BaseModel):

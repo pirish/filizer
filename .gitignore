@@ -8,3 +8,8 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Application specific
+filizer.log
+.pytest_cache/
+.ralph/

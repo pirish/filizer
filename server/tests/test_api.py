@@ -3,6 +3,7 @@ from fastapi.testclient import TestClient
 from unittest.mock import AsyncMock, MagicMock, patch
 import main
 from main import app, get_current_username, FileModel
+from common.models import DuplicateStatus
 
 # Override auth for tests
 def override_auth():
@@ -38,7 +39,7 @@ def test_crud_file(mock_engine):
         md5="abc",
         parent_dir="/tmp",
         full_path="/tmp/test_file.txt",
-        duplicate=False
+        duplicate_status=DuplicateStatus.DUPLICATE
     )
     # Manually set id as if it came from DB
     mock_file.id = file_id 
@@ -54,7 +55,7 @@ def test_crud_file(mock_engine):
         "md5": "abc",
         "parent_dir": "/tmp",
         "full_path": "/tmp/test_file.txt",
-        "duplicate": False
+        "duplicate_status": DuplicateStatus.DUPLICATE.name
     }
     response = client.post("/api/v1/files/", json=file_data)
     assert response.status_code == 200

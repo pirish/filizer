@@ -1,0 +1,7 @@
+from enum import Enum
+
+class DuplicateStatus(str, Enum):
+    NONE = "NONE"
+    DUPLICATE_CONTENTS = "DUPLICATE_CONTENTS"
+    DUPLICATE = "DUPLICATE"
+    PREVIOUSLY_SCANNED = "PREVIOUSLY_SCANNED"
