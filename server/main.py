@@ -57,7 +57,7 @@ class FileModel(DbModel):
     full_path: str
     action: Optional[str] = None
     action_args: Optional[str] = None
-    duplicate: bool
+    duplicate_status: str
     _collection: ClassVar[str] = "files"
 
 class ActionUpdate(BaseModel):
