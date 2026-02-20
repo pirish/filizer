@@ -221,3 +221,24 @@ def test_marked_for_deletion_logic(mock_input, tmp_path, caplog):
 
     assert f"Removed marker file: {marker_file}" in caplog.text
     assert not marker_file.exists()
+
+@patch('builtins.input', return_value='n')
+def test_marked_for_deletion_skip(mock_input, tmp_path, caplog):
+    """Test that declining to delete MARKED_FOR_DELETION marker skips directory processing."""
+    caplog.set_level(logging.INFO)
+    
+    test_dir = tmp_path / "test_dir"
+    test_dir.mkdir()
+    (test_dir / "MARKED_FOR_DELETION").touch()
+    (test_dir / "file.txt").write_text("content")
+
+    api_url = "https://api.example.com/files"
+    
+    with requests_mock.Mocker() as m:
+        m.get(api_url, json=[])
+        process_directory(str(test_dir), api_url, token="test-token", dry_run=False, force=False, excludes=[])
+
+    assert f"Skipping processing for directory {test_dir}" in caplog.text
+    assert "New Files Posted:           0" in caplog.text
+    # Ensure marker file still exists
+    assert (test_dir / "MARKED_FOR_DELETION").exists()

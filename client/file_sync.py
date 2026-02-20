@@ -188,6 +188,11 @@ def process_directory(target_dir: str, api_url: str, token: Optional[str],
                     if confirm.lower() == 'y':
                         marker_file.unlink()
                         logging.info(f"Removed marker file: {marker_file}")
+                    else:
+                        logging.info(f"Skipping processing for directory {current_dir} as it is marked for deletion")
+                        dirs[:] = []
+                        files[:] = []
+                        continue
 
             if any(skipped_dir == current_dir or skipped_dir in current_dir.parents for skipped_dir in skipped_dirs):
                 dirs[:] = []
